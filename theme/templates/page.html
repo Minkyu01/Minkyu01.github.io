@@ -77,18 +77,33 @@
     {%- macro nav_page(p) -%}
       <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}><span class="nav-text">{{ p.title }}</span>{% if p.local_only %}<span class="nav-draft">로컬</span>{% elif p.draft %}<span class="nav-draft">초안</span>{% endif %}</a>
     {%- endmacro -%}
-    {%- macro nav_items(node) -%}
-      {%- for item in node.items -%}
+    {%- macro nav_chevron() -%}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    {%- endmacro -%}
+    {%- macro nav_toggle(f, here) -%}
+      <button type="button" class="nav-toggle" aria-expanded="{{ 'true' if here else 'false' }}" aria-label="{{ f.title }} 펼치기·접기">{{ nav_chevron() }}</button>
+    {%- endmacro -%}
+    {#- 폴더 안 목록. site.yaml 의 sidebar_limit 줄을 넘으면 뒤쪽은 "n개 더 보기" 뒤에 접어 둔다 -#}
+    {%- macro nav_list(f) -%}
+      {%- set shown, rest = nav_split(f.items, page.url, site.get("sidebar_limit", 8)) -%}
+      {{ nav_items(shown) }}
+      {%- if rest %}
+      <div class="nav-overflow" data-folder="{{ f.rel }}">
+        <div class="nav-rest"><div class="nav-rest-inner">{{ nav_items(rest) }}</div></div>
+        <button type="button" class="nav-more" aria-expanded="false">{{ nav_chevron() }}<span class="nav-more-label">{{ rest|length }}개 더 보기</span><span class="nav-less-label">접기</span></button>
+      </div>
+      {%- endif -%}
+    {%- endmacro -%}
+    {%- macro nav_items(items) -%}
+      {%- for item in items -%}
       {%- if item.is_folder -%}
       {%- set here = page.url.startswith(item.url) -%}
       <div class="nav-folder{% if here %} open{% endif %}" data-folder="{{ item.rel }}">
         <div class="nav-folder-row{% if item.url == page.url %} active{% endif %}">
           <a class="nav-folder-link" href="{{ base }}{{ item.url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.title }}</a>
-          <button type="button" class="nav-toggle" aria-expanded="{{ 'true' if here else 'false' }}" aria-label="{{ item.title }} 펼치기·접기">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
-          </button>
+          {{ nav_toggle(item, here) }}
         </div>
-        <div class="nav-children"><div class="nav-children-inner">{{ nav_items(item) }}</div></div>
+        <div class="nav-children"><div class="nav-children-inner">{{ nav_list(item) }}</div></div>
       </div>
       {%- else -%}
       {{ nav_page(item) }}
@@ -98,15 +113,38 @@
     <nav class="sidebar-nav">
       <a class="nav-link{% if page.is_home %} active{% endif %}" href="{{ base }}/"{% if page.is_home %} aria-current="page"{% endif %}>{{ home.title }}</a>
       {% for p in root_pages %}{{ nav_page(p) }}{% endfor %}
+      {#- 맨 위 그룹도 폴더처럼 접는다. 처음엔 지금 페이지가 든 그룹만 펼침 #}
       {% for g in tree %}
-      <a class="nav-group-title{% if g.url == page.url %} active{% endif %}" href="{{ base }}{{ g.url }}">{{ g.title }}</a>
-      {{ nav_items(g) }}
+      {%- set here = page.url.startswith(g.url) %}
+      <div class="nav-folder nav-group{% if here %} open{% endif %}" data-folder="{{ g.rel }}">
+        <div class="nav-group-row">
+          <a class="nav-group-title{% if g.url == page.url %} active{% endif %}" href="{{ base }}{{ g.url }}"{% if g.url == page.url %} aria-current="page"{% endif %}>{{ g.title }}</a>
+          {{ nav_toggle(g, here) }}
+        </div>
+        <div class="nav-children"><div class="nav-children-inner">{{ nav_list(g) }}</div></div>
+      </div>
       {% endfor %}
-      <div class="nav-group-title">더 보기</div>
+      <div class="nav-group-title">둘러보기</div>
       {% if has_series %}<a class="nav-link{% if page.url.startswith('/series/') %} active{% endif %}" href="{{ base }}/series/">시리즈</a>{% endif %}
       <a class="nav-link{% if page.url == '/tags/' %} active{% endif %}" href="{{ base }}/tags/">태그</a>
       <a class="nav-link" href="{{ base }}/feed.xml">RSS</a>
     </nav>
+    <script>
+      // 펼쳐 둔 폴더와 "더 보기"를 그리기 전에 되살린다 (app.js 에서 하면 열리는 모습이 매번 한 번씩 보인다)
+      try {
+        const nav = document.currentScript.previousElementSibling;
+        const restore = (key, box, btn) => {
+          const keep = JSON.parse(localStorage.getItem(key) || "[]");
+          nav.querySelectorAll(box).forEach((el) => {
+            if (!keep.includes(el.dataset.folder)) return;
+            el.classList.add("open");
+            el.querySelector(btn).setAttribute("aria-expanded", "true");
+          });
+        };
+        restore("nav-open", ".nav-folder", ":scope > div > .nav-toggle");
+        restore("nav-more", ".nav-overflow", ":scope > .nav-more");
+      } catch (e) {}
+    </script>
     {% if site.footer_card %}
     <div class="sidebar-footer">
       <a class="sidebar-card" href="{{ site.footer_card.href }}" target="_blank" rel="noopener">

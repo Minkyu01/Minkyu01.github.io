@@ -29,6 +29,7 @@ groups:
     title: 웹
 
 home_recent: 8          # 홈의 "최근 글" 개수
+sidebar_limit: 8        # 사이드바 한 목록이 이 줄 수를 넘으면 뒤쪽을 "n개 더 보기" 로 접는다 (0 이면 접지 않음)
 footer_card:            # 사이드바 바닥 카드 (GitBook 의 "Powered by" 자리)
   text: GitHub 에서 소스 보기
   href: https://github.com/Minkyu01/tech_blog

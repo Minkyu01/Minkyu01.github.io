@@ -180,12 +180,17 @@ kbd, .search-kbd kbd, .search-foot kbd {
 .nav-link:hover { background: var(--fill); color: var(--text-strong); }
 .nav-link.active { background: var(--accent-soft); color: var(--link); }   /* 굵기 대신 색으로만 */
 .nav-group-title {
-  margin-top: var(--s6); padding: 0 var(--s3) var(--s1);
+  display: flex; align-items: center; min-height: 32px; margin-top: var(--s4); padding: 0 var(--s3);
   font-size: var(--t7); line-height: var(--t7-lh); font-weight: 700; color: var(--text-faint);
 }
-a.nav-group-title { display: block; border-radius: var(--r-sm); transition: color .15s; }
+a.nav-group-title { border-radius: var(--r-sm); transition: color .15s; }
 a.nav-group-title:hover { color: var(--grey-700); }
 a.nav-group-title.active { color: var(--link); }
+/* 맨 위 그룹 — 제목 줄도 폴더처럼 접고 펼친다. 하위 글은 들여쓰지 않는다 */
+.nav-group { margin-top: var(--s4); }
+.nav-group-row { display: flex; align-items: center; }
+.nav-group-row .nav-group-title { flex: 1; min-width: 0; margin-top: 0; }
+.nav-group > .nav-children > .nav-children-inner { margin-left: 0; border-left: 0; }
 
 /* 폴더 나무 — 접고 펼치기, 하위는 왼쪽 선으로 들여쓰기 */
 .nav-link { display: flex; align-items: center; gap: var(--s2); }
@@ -204,12 +209,30 @@ a.nav-group-title.active { color: var(--link); }
 }
 .nav-toggle:hover { background: var(--grey-200); color: var(--text-strong); }
 .nav-toggle svg { width: 16px; height: 16px; transition: transform .15s; }
-.nav-folder.open > .nav-folder-row .nav-toggle svg { transform: rotate(90deg); }
+.nav-folder.open > :is(.nav-folder-row, .nav-group-row) .nav-toggle svg { transform: rotate(90deg); }
 .nav-children { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .2s ease-out; }
 .nav-folder.open > .nav-children { grid-template-rows: 1fr; }
 .nav-children-inner { overflow: hidden; min-height: 0; }
 .nav-folder.open > .nav-children > .nav-children-inner { padding: 2px 0 var(--s1); }
 .nav-children-inner { margin-left: var(--s3); padding-left: var(--s1); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+/* 긴 목록 — 뒤쪽은 "n개 더 보기" 뒤에 접어 둔다 (펼치면 버튼이 "접기" 로) */
+.nav-overflow { display: flex; flex-direction: column; gap: 2px; }
+.nav-rest { display: grid; grid-template-rows: 0fr; margin-bottom: -2px; transition: grid-template-rows .2s ease-out; }
+.nav-overflow.open > .nav-rest { grid-template-rows: 1fr; margin-bottom: 0; }
+.nav-rest-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-more {
+  display: flex; align-items: center; gap: var(--s1); padding: var(--s2) var(--s3); border-radius: var(--r-sm);
+  font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); text-align: left;
+  transition: background-color .15s, color .15s;
+}
+.nav-more:hover { background: var(--fill); color: var(--grey-700); }
+.nav-more svg { flex: none; width: 14px; height: 14px; transform: rotate(90deg); transition: transform .15s; }
+.nav-overflow.open > .nav-more svg { transform: rotate(-90deg); }
+.nav-overflow.open > .nav-more .nav-more-label, .nav-overflow:not(.open) > .nav-more .nav-less-label { display: none; }
+/* 접힌 목록은 탭 키·화면 낭독기도 건너뛴다 (접히는 0.2초 동안은 보이다가 숨김) */
+.nav-children-inner, .nav-rest-inner { transition: visibility .2s; }
+.nav-folder:not(.open) > .nav-children > .nav-children-inner,
+.nav-overflow:not(.open) > .nav-rest > .nav-rest-inner { visibility: hidden; }
 .sidebar-footer { margin-left: calc(-1 * var(--s3)); }
 .sidebar-card {
   display: flex; align-items: center; gap: var(--s3);

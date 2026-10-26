@@ -200,6 +200,22 @@ def ko_date(d: dt.date | None) -> str:
     return f"{d.year}년 {d.month}월 {d.day}일" if d else ""
 
 
+def nav_split(items: list, here: str, limit) -> tuple[list, list]:
+    """사이드바 한 목록이 limit 줄을 넘으면 "n개 더 보기" 버튼까지 limit 줄이 되게 앞쪽만 남긴다.
+    지금 페이지(또는 그 페이지가 든 폴더)는 늘 보이는 쪽에 둔다. limit 이 0 이면 접지 않는다."""
+    limit = int(limit or 0)
+    if not limit or len(items) <= limit:
+        return items, []
+    cut = limit - 1
+    for i, x in enumerate(items):
+        if x.url == here or (x.is_folder and here.startswith(x.url)):
+            cut = max(cut, i + 1)
+            break
+    if len(items) - cut < 2:    # 하나를 숨기려고 버튼 한 줄을 쓰지는 않는다
+        cut = len(items)
+    return items[:cut], items[cut:]
+
+
 def strip_tags(s: str) -> str:
     s = re.sub(r"<[^>]+>", " ", s)
     s = html.unescape(s)
@@ -445,6 +461,7 @@ class Builder:
         self.env = Environment(loader=FileSystemLoader(THEME / "templates"), autoescape=select_autoescape(["html"]))
         self.env.filters["ko_date"] = ko_date
         self.env.filters["slug"] = slugify
+        self.env.globals["nav_split"] = nav_split
 
     # 1) 읽기
     def load(self):

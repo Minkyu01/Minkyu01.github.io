@@ -41,25 +41,25 @@
     menuBtn.addEventListener("click", () => setSidebar(!sidebar.classList.contains("open")));
     backdrop.addEventListener("click", () => setSidebar(false));
   }
-  // ---- 폴더 접기·펼치기 (펼친 폴더는 이 브라우저에 기억) ----
-  const OPEN_KEY = "nav-open";
-  let opened = [];
-  try { opened = JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"); } catch (e) { opened = []; }
-  const setOpen = (f, open) => {
-    f.classList.toggle("open", open);
-    const b = f.querySelector(":scope > .nav-folder-row .nav-toggle");
-    if (b) b.setAttribute("aria-expanded", String(open));
+  // ---- 폴더·그룹 접기와 긴 목록의 "더 보기" (펼친 것은 이 브라우저에 기억, 되살리기는 page.html 에서) ----
+  const remember = (key, k, open) => {
+    let keep = [];
+    try { keep = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { keep = []; }
+    keep = keep.filter((x) => x !== k);
+    if (open) keep.push(k);
+    try { localStorage.setItem(key, JSON.stringify(keep)); } catch (e) {}
   };
-  $$(".nav-folder").forEach((f) => { if (opened.includes(f.dataset.folder)) setOpen(f, true); });
+  const toggleBox = (box, btn, key) => {
+    const open = !box.classList.contains("open");
+    box.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", String(open));
+    remember(key, box.dataset.folder, open);
+  };
   $$(".nav-toggle").forEach((b) => b.addEventListener("click", (e) => {
     e.preventDefault();
-    const f = b.closest(".nav-folder");
-    const open = !f.classList.contains("open");
-    setOpen(f, open);
-    opened = opened.filter((k) => k !== f.dataset.folder);
-    if (open) opened.push(f.dataset.folder);
-    try { localStorage.setItem(OPEN_KEY, JSON.stringify(opened)); } catch (e2) {}
+    toggleBox(b.closest(".nav-folder"), b, "nav-open");
   }));
+  $$(".nav-more").forEach((b) => b.addEventListener("click", () => toggleBox(b.closest(".nav-overflow"), b, "nav-more")));
 
   // ---- 시리즈 상자: 펼치거나 접은 상태를 기억해서 다음 글에서도 그대로 ----
   const fold = $(".series-fold");
@@ -69,7 +69,7 @@
 
   // 현재 글이 보이도록 사이드바 스크롤
   // 현재 글이 사이드바 가운데 오게: 사이드바 목록만 움직이고 페이지는 그대로 (scrollIntoView 는 페이지까지 내려 버림)
-  const active = $(".sidebar .nav-link.active, .sidebar .nav-folder-row.active");
+  const active = $(".sidebar .nav-link.active, .sidebar .nav-folder-row.active, .sidebar .nav-group-title.active");
   const navList = $(".sidebar-nav");
   if (active && navList) {
     const a = active.getBoundingClientRect(), n = navList.getBoundingClientRect();
