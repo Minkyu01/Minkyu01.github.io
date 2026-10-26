@@ -68,8 +68,13 @@
   });
 
   // 현재 글이 보이도록 사이드바 스크롤
-  const active = $(".sidebar .nav-link.active");
-  if (active) active.scrollIntoView({ block: "center" });
+  // 현재 글이 사이드바 가운데 오게: 사이드바 목록만 움직이고 페이지는 그대로 (scrollIntoView 는 페이지까지 내려 버림)
+  const active = $(".sidebar .nav-link.active, .sidebar .nav-folder-row.active");
+  const navList = $(".sidebar-nav");
+  if (active && navList) {
+    const a = active.getBoundingClientRect(), n = navList.getBoundingClientRect();
+    navList.scrollTop += (a.top - n.top) - (navList.clientHeight - a.height) / 2;
+  }
 
   // ---- 목차 ----
   const toc = $("#toc"), tocBtn = $("#toc-btn");
