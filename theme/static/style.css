@@ -183,6 +183,33 @@ kbd, .search-kbd kbd, .search-foot kbd {
   margin-top: var(--s6); padding: 0 var(--s3) var(--s1);
   font-size: var(--t7); line-height: var(--t7-lh); font-weight: 700; color: var(--text-faint);
 }
+a.nav-group-title { display: block; border-radius: var(--r-sm); transition: color .15s; }
+a.nav-group-title:hover { color: var(--grey-700); }
+a.nav-group-title.active { color: var(--link); }
+
+/* 폴더 나무 — 접고 펼치기, 하위는 왼쪽 선으로 들여쓰기 */
+.nav-link { display: flex; align-items: center; gap: var(--s2); }
+.nav-text { flex: 1; min-width: 0; }
+.nav-draft { flex: none; font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); }
+.nav-folder-row {
+  display: flex; align-items: center; border-radius: var(--r-sm);
+  color: var(--grey-700); transition: background-color .15s, color .15s;
+}
+.nav-folder-row:hover { background: var(--fill); color: var(--text-strong); }
+.nav-folder-row.active { background: var(--accent-soft); color: var(--link); }
+.nav-folder-link { flex: 1; min-width: 0; padding: var(--s2) 0 var(--s2) var(--s3); }
+.nav-toggle {
+  flex: none; width: 32px; height: 32px; margin-right: 2px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint);
+}
+.nav-toggle:hover { background: var(--grey-200); color: var(--text-strong); }
+.nav-toggle svg { width: 16px; height: 16px; transition: transform .15s; }
+.nav-folder.open > .nav-folder-row .nav-toggle svg { transform: rotate(90deg); }
+.nav-children { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .2s ease-out; }
+.nav-folder.open > .nav-children { grid-template-rows: 1fr; }
+.nav-children-inner { overflow: hidden; min-height: 0; }
+.nav-folder.open > .nav-children > .nav-children-inner { padding: 2px 0 var(--s1); }
+.nav-children-inner { margin-left: var(--s3); padding-left: var(--s1); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .sidebar-footer { margin-left: calc(-1 * var(--s3)); }
 .sidebar-card {
   display: flex; align-items: center; gap: var(--s3);
@@ -406,6 +433,58 @@ html.dark .figure .img-light, html:not(.dark) .figure .img-dark { display: none;
 .post-card:hover .post-card-title { color: var(--link); }
 .prose .post-card-desc { margin: var(--s1) 0 0; font-size: var(--t6); line-height: var(--t6-lh); color: var(--text-sub); }
 .post-card-meta { display: block; margin-top: var(--s2); font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); }
+
+/* 위치 (빵부스러기) */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); margin-bottom: var(--s2); font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); }
+.crumbs a { transition: color .15s; }
+.crumbs a:hover { color: var(--text-strong); }
+.crumbs svg { width: 12px; height: 12px; color: var(--grey-400); }
+.tag-draft { background: var(--orange-50); color: var(--orange-900); }
+
+/* 시리즈 상자 — 제목 줄을 누르면 전체 목록이 펼쳐짐. 이전·다음 편은 접혀 있어도 보임 */
+.series-box { margin-top: var(--s6); padding: var(--s2) var(--s2) var(--s3); border-radius: var(--r-lg); background: var(--fill-soft); box-shadow: inset 0 0 0 1px var(--fill); }
+.series-summary { display: block; list-style: none; cursor: pointer; padding: var(--s2) var(--s3) var(--s3); border-radius: var(--r-md); transition: background-color .15s; }
+.series-summary::-webkit-details-marker { display: none; }
+.series-summary:hover { background: var(--fill); }
+.series-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.series-head { display: flex; align-items: center; gap: var(--s2); }
+.series-label { flex: none; font-size: var(--t7); line-height: var(--t7-lh); font-weight: 700; color: var(--link); }
+.series-title { flex: 1; min-width: 0; font-size: var(--t6); line-height: var(--t6-lh); font-weight: 700; color: var(--text-strong); }
+.series-count { flex: none; font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.series-chevron { flex: none; width: 16px; height: 16px; color: var(--text-faint); transition: transform .15s; }
+.series-fold[open] .series-chevron { transform: rotate(180deg); }
+.series-bar { display: block; height: 4px; margin-top: var(--s3); border-radius: 2px; background: var(--grey-200); overflow: hidden; }
+.series-bar span { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.series-list { list-style: none; margin: var(--s1) 0 0; padding: 0 var(--s1); display: flex; flex-direction: column; gap: 2px; }
+.series-list a { display: flex; gap: var(--s3); padding: 6px var(--s2); border-radius: var(--r-sm); font-size: var(--t6); line-height: var(--t6-lh); color: var(--grey-700); transition: background-color .15s, color .15s; }
+.series-list a:hover { background: var(--fill); color: var(--text-strong); }
+.series-list .current a { background: var(--accent-soft); color: var(--link); }
+.series-num { flex: none; min-width: 1.25em; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.series-list .current .series-num { color: var(--link); }
+.series-all { display: inline-block; margin: var(--s2) var(--s3) 0; font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-sub); }
+.series-all:hover { color: var(--link); }
+.series-nav { display: flex; justify-content: space-between; gap: var(--s2); margin-top: var(--s2); padding: 0 var(--s3); }
+.series-nav .btn { max-width: 70%; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.series-nav .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 폴더 카드 (폴더·시리즈 페이지) */
+.folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s3); }
+.prose a.folder-card {
+  display: flex; flex-direction: column; gap: var(--s1); padding: var(--s4) var(--s5); border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--line); color: inherit; text-decoration: none; transition: background-color .15s;
+}
+.prose a.folder-card:hover { background: var(--fill-soft); }
+.folder-card-title { display: flex; align-items: center; gap: var(--s2); font-size: var(--t5); line-height: var(--t5-lh); font-weight: 700; color: var(--text-strong); }
+.folder-card:hover .folder-card-title { color: var(--link); }
+.folder-icon { width: 18px; height: 18px; flex: none; color: var(--text-faint); }
+.folder-card-desc { font-size: var(--t6); line-height: var(--t6-lh); color: var(--text-sub); }
+.folder-card-meta { margin-top: var(--s1); font-size: var(--t7); line-height: var(--t7-lh); color: var(--text-faint); }
+
+/* 번호 있는 글 목록 (시리즈) */
+.prose a.post-card.numbered { display: flex; gap: var(--s4); }
+.post-card-body { display: block; flex: 1; min-width: 0; }
+.post-card-num { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--fill); color: var(--text-sub); font-size: var(--t7); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 앞뒤 글 */
 .pager { display: flex; gap: var(--s3); margin-top: var(--s16); }

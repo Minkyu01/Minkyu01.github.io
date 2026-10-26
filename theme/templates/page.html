@@ -66,18 +66,36 @@
 
 <div class="layout">
   <aside class="sidebar" id="sidebar" aria-label="글 목록">
+    {%- macro nav_page(p) -%}
+      <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}><span class="nav-text">{{ p.title }}</span>{% if p.draft %}<span class="nav-draft">초안</span>{% endif %}</a>
+    {%- endmacro -%}
+    {%- macro nav_items(node) -%}
+      {%- for item in node.items -%}
+      {%- if item.is_folder -%}
+      {%- set here = page.url.startswith(item.url) -%}
+      <div class="nav-folder{% if here %} open{% endif %}" data-folder="{{ item.rel }}">
+        <div class="nav-folder-row{% if item.url == page.url %} active{% endif %}">
+          <a class="nav-folder-link" href="{{ base }}{{ item.url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.title }}</a>
+          <button type="button" class="nav-toggle" aria-expanded="{{ 'true' if here else 'false' }}" aria-label="{{ item.title }} 펼치기·접기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="nav-children"><div class="nav-children-inner">{{ nav_items(item) }}</div></div>
+      </div>
+      {%- else -%}
+      {{ nav_page(item) }}
+      {%- endif -%}
+      {%- endfor -%}
+    {%- endmacro %}
     <nav class="sidebar-nav">
       <a class="nav-link{% if page.is_home %} active{% endif %}" href="{{ base }}/"{% if page.is_home %} aria-current="page"{% endif %}>{{ home.title }}</a>
-      {% for p in root_pages %}
-      <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}>{{ p.title }}</a>
-      {% endfor %}
-      {% for g in groups %}
-      <div class="nav-group-title">{{ g.title }}</div>
-      {% for p in g.pages %}
-      <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}>{{ p.title }}</a>
-      {% endfor %}
+      {% for p in root_pages %}{{ nav_page(p) }}{% endfor %}
+      {% for g in tree %}
+      <a class="nav-group-title{% if g.url == page.url %} active{% endif %}" href="{{ base }}{{ g.url }}">{{ g.title }}</a>
+      {{ nav_items(g) }}
       {% endfor %}
       <div class="nav-group-title">더 보기</div>
+      {% if has_series %}<a class="nav-link{% if page.url.startswith('/series/') %} active{% endif %}" href="{{ base }}/series/">시리즈</a>{% endif %}
       <a class="nav-link{% if page.url == '/tags/' %} active{% endif %}" href="{{ base }}/tags/">태그</a>
       <a class="nav-link" href="{{ base }}/feed.xml">RSS</a>
     </nav>
@@ -94,6 +112,11 @@
 
   <main class="content">
     <header class="page-header">
+      {% if page.crumbs %}
+      <nav class="crumbs" aria-label="위치">
+        {% for c in page.crumbs %}<a href="{{ base }}{{ c.url }}">{{ c.title }}</a>{% if not loop.last %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>{% endif %}{% endfor %}
+      </nav>
+      {% endif %}
       <div class="page-title-row">
         <h1 class="page-title">{{ page.title }}</h1>
         <div class="page-top">
@@ -103,7 +126,7 @@
             <span>목차</span>
           </button>
           {% endif %}
-          {% if not page.is_home and edit_url %}
+          {% if page.kind == 'post' and edit_url %}
           <button type="button" class="btn copy-md-btn" id="copy-md" data-src="{{ base }}{{ page.url }}index.md">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <span>Markdown 복사</span>
@@ -115,8 +138,37 @@
       {% if page.is_post %}
       <p class="page-meta">
         <time datetime="{{ page.date }}">{{ page.date | ko_date }}</time>
+        {% if page.draft %}<span class="tag tag-draft">초안</span>{% endif %}
         {% for t in page.tags %}<a class="tag" href="{{ base }}/tags/#{{ t | slug }}">{{ t }}</a>{% endfor %}
       </p>
+      {% elif page.meta_line %}
+      <p class="page-meta">{{ page.meta_line }}</p>
+      {% endif %}
+      {% if page.series_info %}{% set s = page.series_info %}
+      <section class="series-box" aria-label="시리즈">
+        <details class="series-fold">
+          <summary class="series-summary" title="눌러서 목록 펼치기·접기">
+            <span class="series-head">
+              <span class="series-label">시리즈</span>
+              <span class="series-title">{{ s.title }}</span>
+              <span class="series-count">{{ s.index }} / {{ s.total }}</span>
+              <svg class="series-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+            <span class="series-bar" aria-hidden="true"><span style="width: {{ (s.index / s.total * 100) | round(1) }}%"></span></span>
+          </summary>
+          <ol class="series-list">
+            {% for part in s.parts %}
+            <li{% if part.url == page.url %} class="current"{% endif %}><a href="{{ base }}{{ part.url }}"{% if part.url == page.url %} aria-current="page"{% endif %}><span class="series-num">{{ loop.index }}</span><span>{{ part.title }}</span></a></li>
+            {% endfor %}
+          </ol>
+          <a class="series-all" href="{{ base }}{{ s.url }}">시리즈 페이지에서 보기</a>
+        </details>
+        <script>try{localStorage.getItem("series-open")==="1"&&(document.currentScript.previousElementSibling.open=true)}catch(e){}</script>
+        <div class="series-nav">
+          {% if s.prev %}<a class="btn" href="{{ base }}{{ s.prev.url }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg><span>이전 편</span></a>{% else %}<span></span>{% endif %}
+          {% if s.next %}<a class="btn" href="{{ base }}{{ s.next.url }}"><span>다음 편 · {{ s.next.title }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></a>{% endif %}
+        </div>
+      </section>
       {% endif %}
     </header>
 

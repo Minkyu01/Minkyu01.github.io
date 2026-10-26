@@ -82,10 +82,60 @@ class Page:
     group_title: str = ""
     has_math: bool = False      # 수식이 있으면 KaTeX 를 불러온다
     has_mermaid: bool = False   # mermaid 블록이 있으면 Mermaid 를 불러온다
+    folder: str = ""            # content/ 기준 폴더 ("42/webserv"), 루트면 ""
+    series: str | None = None   # 머리말 series: 이름
+    series_order: int | None = None
+    series_description: str = ""
+    series_info: dict | None = None
+    kind: str = "post"          # post · home · folder · series · special
+    crumbs: list = field(default_factory=list)   # 위쪽 폴더들 [{title, url}]
+    place: str = ""             # 가장 가까운 폴더 이름 (목록의 보조 정보)
+    meta_line: str = ""         # 폴더·시리즈 페이지 머리의 한 줄 (글 n편 …)
+
+    is_folder = False
 
     @property
     def is_post(self) -> bool:
-        return self.group is not None
+        return self.group is not None and self.kind == "post"
+
+
+@dataclass
+class Folder:
+    rel: str                    # content/ 기준 경로 "42/webserv"
+    url: str                    # "/42/webserv/"
+    title: str
+    description: str = ""
+    order: int | None = None
+    intro_md: str = ""          # _index.md 본문
+    src: Path | None = None     # _index.md 경로 (없으면 None)
+    parent: "Folder | None" = None
+    folders: list = field(default_factory=list)
+    pages: list = field(default_factory=list)
+    items: list = field(default_factory=list)     # 정렬된 하위 폴더 + 글
+
+    is_folder = True
+
+    def all_pages(self) -> list:
+        out = []
+        for x in self.items:
+            out += x.all_pages() if x.is_folder else [x]
+        return out
+
+    def ancestors(self) -> list:
+        chain, f = [], self.parent
+        while f is not None:
+            chain.insert(0, f)
+            f = f.parent
+        return chain
+
+
+class BuildError(Exception):
+    """글 설정이 잘못돼서 빌드를 멈춰야 할 때 (주소 겹침 등)."""
+
+
+def dir_url(rel_dir: str) -> str:
+    """폴더 경로 → 주소. 폴더 이름마다 slugify ("ft_irc" → "ft-irc")."""
+    return "/" + "".join(slugify(part) + "/" for part in rel_dir.split("/") if part)
 
 
 # ---------- 유틸 ----------
@@ -383,68 +433,115 @@ class Builder:
 
     # 1) 읽기
     def load(self):
+        self.folder_meta: dict[str, dict] = {}
         for src in sorted(CONTENT.rglob("*.md")):
             rel = src.relative_to(CONTENT).as_posix()
-            if any(part.startswith(("_", ".")) for part in Path(rel).parts):
+            parts = Path(rel).parts
+            if any(part.startswith(("_", ".")) for part in parts):
+                if parts[-1] == "_index.md" and not any(x.startswith(("_", ".")) for x in parts[:-1]) and len(parts) > 1:
+                    fm, body = split_front_matter(src.read_text(encoding="utf-8"))   # 폴더 소개·이름·순서
+                    self.folder_meta["/".join(parts[:-1])] = {**fm, "body": body, "src": src}
                 continue
             fm, body = split_front_matter(src.read_text(encoding="utf-8"))
             draft = bool(fm.get("draft"))
             if draft and not self.drafts:
                 continue
-            parts = Path(rel).parts
             group = parts[0] if len(parts) > 1 else None
-            stem = src.stem
+            folder = posixpath.dirname(rel)
             is_home = rel == "index.md"
-            slug = fm.get("slug") or slugify(stem)
-            if is_home:
-                url = "/"
-            elif group:
-                url = f"/{group}/{slug}/"
-            else:
-                url = f"/{slug}/"
+            num, stem = None, src.stem
+            m = re.match(r"^(\d+)[-_. ](.+)$", stem)          # "01-소켓.md" → 순서 1, 주소 "소켓"
+            if m:
+                num, stem = int(m.group(1)), m.group(2)
+            slug = str(fm.get("slug") or slugify(stem))
+            url = "/" if is_home else dir_url(folder) + slug + "/"
             title = fm.get("title") or (self.cfg["title"] if is_home else stem)
+            order = fm.get("order", num)
             page = Page(
                 src=src, rel=rel, group=group, slug=slug, url=url, title=str(title),
                 description=str(fm.get("description") or ""),
                 date=to_date(fm.get("date")) or git_date(src, first=True) or file_date(src),
                 updated=to_date(fm.get("updated")) or git_date(src, first=False) or file_date(src),
                 tags=[str(t) for t in (fm.get("tags") or [])],
-                order=fm.get("order"), draft=draft, body_md=body, is_home=is_home,
+                order=order, draft=draft, body_md=body, is_home=is_home,
+                folder=folder, kind="home" if is_home else "post",
+                series=str(fm["series"]) if fm.get("series") else None,
+                series_order=fm.get("series_order", order),
+                series_description=str(fm.get("series_description") or ""),
             )
             self.pages.append(page)
             self.pages_by_rel[rel] = page
         if "index.md" not in self.pages_by_rel:
             home = Page(src=CONTENT / "index.md", rel="index.md", group=None, slug="", url="/",
                         title=self.cfg["title"], description=self.cfg.get("description", ""),
-                        body_md="<!-- recent-posts -->", is_home=True, date=dt.date.today(), updated=dt.date.today())
+                        body_md="<!-- recent-posts -->", is_home=True, kind="home",
+                        date=dt.date.today(), updated=dt.date.today())
             self.pages.insert(0, home)
             self.pages_by_rel["index.md"] = home
 
-    # 2) 사이드바 순서
+    # 2) 폴더 나무 · 순서 · 시리즈
+    @staticmethod
+    def item_key(x):
+        """order 가 있으면 그 순서. 없으면 폴더 먼저(이름순), 글은 최신순."""
+        if x.is_folder:
+            return (x.order is None, x.order or 0, 0, 0, x.title)
+        return (x.order is None, x.order or 0, 1, -(x.date.toordinal() if x.date else 0), x.title)
+
     def arrange(self):
-        titles = {g["dir"]: g["title"] for g in self.cfg.get("groups", [])}
-        order = [g["dir"] for g in self.cfg.get("groups", [])]
-        dirs = sorted({p.group for p in self.pages if p.group})
-        for d in dirs:
-            if d not in order:
-                order.append(d)
+        titles = {str(g["dir"]): g["title"] for g in self.cfg.get("groups", [])}
+        top_order = [str(g["dir"]) for g in self.cfg.get("groups", [])]
+        self.folders: dict[str, Folder] = {}
 
-        def key(p: Page):
-            return (p.order is None, p.order if p.order is not None else 0,
-                    -(p.date.toordinal() if p.date else 0), p.title)
+        def get_folder(rel: str) -> Folder:
+            if rel in self.folders:
+                return self.folders[rel]
+            parent = get_folder(posixpath.dirname(rel)) if "/" in rel else None
+            meta = self.folder_meta.get(rel, {})
+            name = rel.rsplit("/", 1)[-1]
+            title = (titles.get(rel) if parent is None else None) or meta.get("title") or name
+            f = Folder(rel=rel, url=dir_url(rel), title=str(title), description=str(meta.get("description") or ""),
+                       order=meta.get("order"), intro_md=meta.get("body", ""), src=meta.get("src"), parent=parent)
+            self.folders[rel] = f
+            if parent is not None:
+                parent.folders.append(f)
+            return f
 
-        self.groups = []
-        for d in order:
-            members = sorted([p for p in self.pages if p.group == d], key=key)
-            if not members:
-                continue
-            for p in members:
-                p.group_title = titles.get(d, d)
-            self.groups.append({"dir": d, "title": titles.get(d, d), "pages": members})
-        root_pages = sorted([p for p in self.pages if p.group is None and not p.is_home], key=key)
+        for p in self.pages:
+            if p.folder:
+                get_folder(p.folder).pages.append(p)
+        for f in self.folders.values():
+            f.items = sorted(f.folders + f.pages, key=self.item_key)
+
+        tops = [f for f in self.folders.values() if f.parent is None]
+        rank = {d: i for i, d in enumerate(top_order)}
+        self.tree = sorted(tops, key=lambda f: (rank.get(f.rel, len(rank)), f.title))
+
+        for f in self.folders.values():
+            chain = f.ancestors() + [f]
+            for p in f.pages:
+                p.crumbs = [{"title": a.title, "url": a.url} for a in chain]
+                p.place = f.title
+                p.group_title = chain[0].title
+
+        # 앞뒤 글 순서 = 홈 → 루트 글 → 사이드바를 위에서 아래로 (폴더 페이지는 빼고)
         home = self.pages_by_rel["index.md"]
-        self.nav = [home] + root_pages + [p for g in self.groups for p in g["pages"]]
-        self.root_pages = root_pages
+        self.root_pages = sorted([p for p in self.pages if not p.folder and not p.is_home], key=self.item_key)
+        self.nav = [home] + self.root_pages + [p for f in self.tree for p in f.all_pages()]
+        self.groups = [{"dir": f.rel, "title": f.title, "pages": f.all_pages()} for f in self.tree]
+
+        # 시리즈: 이름이 같은 글을 series_order(없으면 order·날짜) 순으로
+        self.series: dict[str, dict] = {}
+        for p in self.pages:
+            if p.series:
+                entry = self.series.setdefault(p.series, {"title": p.series, "url": f"/series/{slugify(p.series)}/", "parts": [], "description": ""})
+                entry["parts"].append(p)
+                entry["description"] = entry["description"] or p.series_description
+        for s_ in self.series.values():
+            parts = sorted(s_["parts"], key=lambda p: (p.series_order is None, p.series_order or 0, p.date or dt.date.min, p.title))
+            s_["parts"] = parts
+            for i, p in enumerate(parts):
+                p.series_info = {"title": s_["title"], "url": s_["url"], "index": i + 1, "total": len(parts), "parts": parts,
+                                 "prev": parts[i - 1] if i else None, "next": parts[i + 1] if i + 1 < len(parts) else None}
 
     # 3) 렌더
     def render_markdown(self, page: Page):
@@ -460,16 +557,96 @@ class Builder:
         page.text = strip_tags(html_out)
         page.excerpt = page.description or page.text[:140]
 
+    FOLDER_ICON = ('<svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+                   'stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>')
+
+    def post_item_html(self, p: Page, number: int | None = None, show_place: bool = True) -> str:
+        """홈·폴더·시리즈 목록에서 쓰는 글 한 줄 (제목 · 설명 · 날짜 · 위치)."""
+        bits = [ko_date(p.date)]
+        if show_place and p.place:
+            bits.append(p.place)
+        if p.series_info and number is None:
+            bits.append(f"{p.series_info['title']} {p.series_info['index']}편")
+        if p.draft:
+            bits.append("초안")
+        meta = " · ".join(b for b in bits if b)
+        desc = f'<p class="post-card-desc">{html.escape(p.excerpt)}</p>' if p.excerpt else ""
+        num = f'<span class="post-card-num">{number}</span>' if number is not None else ""
+        return (f'<a class="post-card{" numbered" if num else ""}" href="{self.base}{p.url}">{num}<span class="post-card-body">'
+                f'<span class="post-card-title">{html.escape(p.title)}</span>{desc}'
+                f'<span class="post-card-meta">{html.escape(meta)}</span></span></a>')
+
     def recent_posts_html(self) -> str:
         posts = sorted([p for p in self.pages if p.is_post], key=lambda p: (p.date or dt.date.min), reverse=True)
         posts = posts[: int(self.cfg.get("home_recent", 8))]
-        items = []
-        for p in posts:
-            meta = " · ".join(x for x in [ko_date(p.date), p.group_title] if x)
-            desc = f'<p class="post-card-desc">{html.escape(p.excerpt)}</p>' if p.excerpt else ""
-            items.append(f'<a class="post-card" href="{self.base}{p.url}"><span class="post-card-title">{html.escape(p.title)}</span>'
-                         f'{desc}<span class="post-card-meta">{html.escape(meta)}</span></a>')
-        return '<div class="post-list">' + "".join(items) + "</div>"
+        return '<div class="post-list">' + "".join(self.post_item_html(p) for p in posts) + "</div>"
+
+    def folder_card_html(self, f: Folder) -> str:
+        pages = f.all_pages()
+        latest = max((p.date for p in pages if p.date), default=None)
+        meta = " · ".join(x for x in [f"글 {len(pages)}편", f"최근 {ko_date(latest)}" if latest else ""] if x)
+        desc = f'<span class="folder-card-desc">{html.escape(f.description)}</span>' if f.description else ""
+        return (f'<a class="folder-card" href="{self.base}{f.url}"><span class="folder-card-title">{self.FOLDER_ICON}'
+                f'{html.escape(f.title)}</span>{desc}<span class="folder-card-meta">{html.escape(meta)}</span></a>')
+
+    @staticmethod
+    def section_heading(text: str, hid: str) -> str:
+        return f'<h2 id="{hid}">{html.escape(text)}<a class="heading-anchor" href="#{hid}" aria-label="이 제목으로 링크">#</a></h2>'
+
+    def make_folder_page(self, f: Folder) -> Page:
+        src = f.src or (ROOT / "_folder_")
+        rel = f"{f.rel}/_index.md"
+        pg = Page(src=src, rel=rel, group=None, slug=f.url.strip("/").rsplit("/", 1)[-1], url=f.url, title=f.title,
+                  description=f.description, kind="folder", body_md=f.intro_md, folder=f.rel,
+                  crumbs=[{"title": a.title, "url": a.url} for a in f.ancestors()],
+                  date=dt.date.today(), updated=None)
+        pages = f.all_pages()
+        pg.meta_line = f"글 {len(pages)}편" + (f" · 폴더 {len(f.folders)}개" if f.folders else "")
+        return pg
+
+    def folder_listing(self, f: Folder, pg: Page) -> None:
+        """폴더 소개(있으면) 아래에 하위 폴더 카드와 글 목록을 붙인다. 사이드바에서 먼저 오는 쪽을 먼저."""
+        subs = [x for x in f.items if x.is_folder]
+        posts = [x for x in f.items if not x.is_folder]
+        blocks = []
+        if subs:
+            blocks.append(("폴더", '<div class="folder-grid">' + "".join(self.folder_card_html(x) for x in subs) + "</div>"))
+        if posts:
+            blocks.append(("글 목록", '<div class="post-list">' + "".join(self.post_item_html(x, show_place=False) for x in posts) + "</div>"))
+        if len(blocks) == 2 and not f.items[0].is_folder:   # 글이 먼저 오는 폴더는 글 목록을 위로
+            blocks.reverse()
+        for title, body in blocks:
+            hid = slugify(title)
+            pg.body_html += self.section_heading(title, hid) + body
+            pg.toc.append({"level": 2, "text": title, "id": hid})
+
+    def make_series_pages(self) -> list[Page]:
+        out = []
+        if not self.series:
+            return out
+        cards = []
+        for s_ in sorted(self.series.values(), key=lambda x: -max((p.date or dt.date.min).toordinal() for p in x["parts"])):
+            parts = s_["parts"]
+            latest = max((p.date for p in parts if p.date), default=None)
+            items = "".join(self.post_item_html(p, number=i + 1) for i, p in enumerate(parts))
+            pg = Page(src=ROOT / "_series_", rel=f"series/{slugify(s_['title'])}", group=None, slug=slugify(s_["title"]),
+                      url=s_["url"], title=s_["title"], kind="series",
+                      description=s_["description"],
+                      crumbs=[{"title": "시리즈", "url": "/series/"}], date=dt.date.today(), updated=None)
+            pg.meta_line = f"시리즈 · {len(parts)}편" + (f" · 최근 {ko_date(latest)}" if latest else "")
+            pg.body_html = '<div class="post-list">' + items + "</div>"
+            out.append(pg)
+            first = parts[0]
+            desc = s_["description"] or f"1편 · {first.title}"
+            cards.append(f'<a class="folder-card" href="{self.base}{s_["url"]}"><span class="folder-card-title">{html.escape(s_["title"])}</span>'
+                         f'<span class="folder-card-desc">{html.escape(desc)}</span>'
+                         f'<span class="folder-card-meta">{len(parts)}편{" · 최근 " + ko_date(latest) if latest else ""}</span></a>')
+        index = Page(src=ROOT / "_series_", rel="series", group=None, slug="series", url="/series/", title="시리즈",
+                     description="여러 편으로 이어지는 글을 묶어 봅니다.", kind="series",
+                     body_html='<div class="folder-grid">' + "".join(cards) + "</div>",
+                     date=dt.date.today(), updated=None)
+        index.meta_line = f"시리즈 {len(self.series)}개"
+        return [index] + out
 
     def tags_html(self) -> tuple[str, list[dict]]:
         tags: dict[str, list[Page]] = {}
@@ -496,17 +673,29 @@ class Builder:
         repo = (self.cfg.get("repo") or "").rstrip("/")
         if repo and page.src.exists():
             edit_url = f"{repo}/edit/{self.cfg.get('edit_branch', 'main')}/content/{page.rel}"
-        tpl = self.env.get_template(template)
-        out_html = tpl.render(
-            site=self.cfg, base=self.base, site_url=self.site_url, page=page, groups=self.groups,
-            root_pages=self.root_pages, home=self.pages_by_rel["index.md"], prev=prev_p, next=next_p,
-            edit_url=edit_url, asset_v=self.asset_v, **extra,
-        )
+        out_html = self.render_tpl(page, prev_p, next_p, edit_url, template, **extra)
         dest = self.out / page.url.strip("/") / "index.html" if page.url != "/" else self.out / "index.html"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(out_html, encoding="utf-8")
         if page.src.exists():
             (dest.parent / "index.md").write_text(f"# {page.title}\n\n{page.body_md}", encoding="utf-8")
+
+    def render_tpl(self, page: Page, prev_p=None, next_p=None, edit_url="", template="page.html", **extra) -> str:
+        return self.env.get_template(template).render(
+            site=self.cfg, base=self.base, site_url=self.site_url, page=page, groups=self.groups, tree=self.tree,
+            root_pages=self.root_pages, home=self.pages_by_rel["index.md"], prev=prev_p, next=next_p,
+            edit_url=edit_url, asset_v=self.asset_v, has_series=bool(self.series), **extra,
+        )
+
+    def check_urls(self, pages: list[Page]) -> None:
+        """같은 주소에 두 페이지가 나오면 하나가 조용히 사라지므로 빌드를 멈춘다."""
+        seen: dict[str, Page] = {}
+        for p in pages:
+            if p.url in seen:
+                a, b = seen[p.url], p
+                raise BuildError(f"주소가 겹칩니다: {p.url}\n  - {a.rel} ({a.kind})\n  - {b.rel} ({b.kind})\n"
+                                 "  한쪽 머리말에 slug: 를 적어 주소를 바꾸세요.")
+            seen[p.url] = p
 
     def copy_static(self):
         assets = self.out / "assets"
@@ -548,6 +737,7 @@ class Builder:
         (self.out / "feed.xml").write_text(rss, encoding="utf-8")
         # sitemap · robots · llms.txt
         urls = "".join(f"<url><loc>{self.site_url}{p.url}</loc><lastmod>{p.updated}</lastmod></url>" for p in self.pages)
+        urls += "".join(f"<url><loc>{self.site_url}{f.url}</loc></url>" for f in self.folders.values())
         (self.out / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>', encoding="utf-8")
         (self.out / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {self.site_url}/sitemap.xml\n", encoding="utf-8")
         lines = [f"# {self.cfg['title']}", "", f"> {self.cfg.get('description', '')}", ""]
@@ -570,22 +760,31 @@ class Builder:
             if not p.is_home:
                 self.render_markdown(p)
         self.render_markdown(self.pages_by_rel["index.md"])   # 홈은 다른 글의 요약이 필요하니 마지막에
+        folder_pages = []
+        for f in self.folders.values():
+            pg = self.make_folder_page(f)
+            self.render_markdown(pg)          # _index.md 본문(소개)
+            self.folder_listing(f, pg)
+            folder_pages.append(pg)
+        series_pages = self.make_series_pages()
+        specials = [Page(src=ROOT / "_tags_", rel="tags", group=None, slug="tags", url="/tags/", title="태그", kind="special")]
+        self.check_urls(self.pages + folder_pages + series_pages + specials)
         for p in self.pages:
+            self.write_page(p)
+        for p in folder_pages + series_pages:
             self.write_page(p)
         # 태그 페이지
         tags_body, tags_toc = self.tags_html()
         tags_page = Page(src=ROOT / "_tags_", rel="tags", group=None, slug="tags", url="/tags/", title="태그",
-                         description="글에 붙은 태그를 모아 봅니다.", body_html=tags_body, toc=tags_toc,
+                         description="글에 붙은 태그를 모아 봅니다.", body_html=tags_body, toc=tags_toc, kind="special",
                          date=dt.date.today(), updated=dt.date.today())
         self.write_page(tags_page)
         # 404
         nf = Page(src=ROOT / "_404_", rel="404", group=None, slug="404", url="/404/", title="페이지를 찾을 수 없습니다",
                   description="주소가 바뀌었거나 지워진 글입니다.", body_html=f'<p><a href="{self.base}/">홈으로 돌아가기</a></p>',
                   date=dt.date.today(), updated=dt.date.today())
-        tpl = self.env.get_template("page.html")
-        (self.out / "404.html").write_text(tpl.render(site=self.cfg, base=self.base, site_url=self.site_url, page=nf, groups=self.groups,
-                                                      root_pages=self.root_pages, home=self.pages_by_rel["index.md"], prev=None, next=None,
-                                                      edit_url="", asset_v=self.asset_v), encoding="utf-8")
+        nf.kind = "special"
+        (self.out / "404.html").write_text(self.render_tpl(nf), encoding="utf-8")
         self.copy_static()
         self.write_extras()
         return len(self.pages)
@@ -599,7 +798,11 @@ def main(argv=None):
     ap.add_argument("--drafts", action="store_true", help="draft: true 글도 포함")
     args = ap.parse_args(argv)
     b = Builder(Path(args.out), args.base, args.url, args.drafts)
-    n = b.build()
+    try:
+        n = b.build()
+    except BuildError as e:
+        print(f"빌드 멈춤: {e}", file=sys.stderr)
+        sys.exit(1)
     print(f"built {n} pages → {b.out}  (base='{b.base}')")
 
 

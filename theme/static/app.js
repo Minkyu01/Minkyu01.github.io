@@ -41,6 +41,32 @@
     menuBtn.addEventListener("click", () => setSidebar(!sidebar.classList.contains("open")));
     backdrop.addEventListener("click", () => setSidebar(false));
   }
+  // ---- 폴더 접기·펼치기 (펼친 폴더는 이 브라우저에 기억) ----
+  const OPEN_KEY = "nav-open";
+  let opened = [];
+  try { opened = JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"); } catch (e) { opened = []; }
+  const setOpen = (f, open) => {
+    f.classList.toggle("open", open);
+    const b = f.querySelector(":scope > .nav-folder-row .nav-toggle");
+    if (b) b.setAttribute("aria-expanded", String(open));
+  };
+  $$(".nav-folder").forEach((f) => { if (opened.includes(f.dataset.folder)) setOpen(f, true); });
+  $$(".nav-toggle").forEach((b) => b.addEventListener("click", (e) => {
+    e.preventDefault();
+    const f = b.closest(".nav-folder");
+    const open = !f.classList.contains("open");
+    setOpen(f, open);
+    opened = opened.filter((k) => k !== f.dataset.folder);
+    if (open) opened.push(f.dataset.folder);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(opened)); } catch (e2) {}
+  }));
+
+  // ---- 시리즈 상자: 펼치거나 접은 상태를 기억해서 다음 글에서도 그대로 ----
+  const fold = $(".series-fold");
+  if (fold) fold.addEventListener("toggle", () => {
+    try { localStorage.setItem("series-open", fold.open ? "1" : "0"); } catch (e) {}
+  });
+
   // 현재 글이 보이도록 사이드바 스크롤
   const active = $(".sidebar .nav-link.active");
   if (active) active.scrollIntoView({ block: "center" });
@@ -67,7 +93,8 @@
       const line = 64 + 32;
       let pick = headings[0];
       for (const h of headings) { if (h.getBoundingClientRect().top <= line + 8) pick = h; else break; }
-      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) pick = headings[headings.length - 1];   // 끝까지 내리면 마지막 제목
+      const scrollable = document.documentElement.scrollHeight > innerHeight + 8;
+      if (scrollable && scrollY > 0 && innerHeight + scrollY >= document.documentElement.scrollHeight - 4) pick = headings[headings.length - 1];   // 끝까지 내리면 마지막 제목
       if (pick && pick !== current) {
         current = pick;
         tocLinks.forEach((a) => a.classList.remove("active"));
