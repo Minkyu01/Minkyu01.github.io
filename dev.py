@@ -18,7 +18,7 @@
 - 머리말 오류 등으로 빌드가 멈추면 이전 화면을 그대로 두고, 화면 아래 상자에 이유를 보여 준다.
 
 배포 미리보기 (4901) — main 브랜치에 커밋된 것만, GitHub Actions 와 같은 방법으로 빌드한 모습.
-- 초안·로컬 전용 글·main 에 아직 안 합친 것은 빠진다. 주소도 실제 사이트처럼 /tech_blog/ 아래.
+- 초안·로컬 전용 글·main 에 아직 안 합친 것은 빠진다. site.yaml 의 url 에 하위 경로가 있으면 주소도 실제처럼 그 아래.
 - main 이 바뀌면 (커밋·합치기) 다시 빌드한다.
 
 실행:  uv run --no-project dev.py 4900      (배포 미리보기는 그다음 번호)
@@ -56,7 +56,7 @@ class Preview:
         self.out, self.name = out, name
         self.next = out.with_name(out.name + ".next")
         self.old = out.with_name(out.name + ".old")
-        self.base = ""              # 사이트가 놓이는 하위 경로. 배포 미리보기만 "/tech_blog"
+        self.base = ""              # 사이트가 놓이는 하위 경로 (배포 미리보기만 site.yaml url 을 따름, 예: "/blog")
         self.builds = 0
         self.lock = threading.Lock()
         # 미리보기 창이 0.6초마다 읽어 간다. hint 는 빌드가 멈췄을 때 상자 첫 줄, warn 은 멈추지 않는 경고(노란 상자)
@@ -306,7 +306,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 msg = pv.state["error"] or "빌드하는 중…"
             page = f"<!doctype html><meta charset=utf-8><title>빌드 멈춤</title><body><pre>{html.escape(msg)}</pre></body>".encode()
             return self.send_bytes(503, page.replace(b"</body>", INJECT + b"</body>"), "text/html; charset=utf-8")
-        if pv.base:                                  # 배포 미리보기는 실제 사이트처럼 /tech_blog/ 아래에 있다
+        if pv.base:                                  # 하위 경로로 배포하는 사이트면 실제처럼 그 아래에 둔다
             if path in ("/", pv.base):
                 return self.redirect(pv.base + "/")
             if not path.startswith(pv.base + "/"):
