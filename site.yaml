@@ -1,6 +1,14 @@
 # 블로그 설정 — 값을 바꾸고 다시 빌드하면 반영된다.
 title: Minkyu's Blog
 emoji: 🧭
+# 헤더의 블로그 이름 글꼴 (본문 글꼴은 그대로). 비워 두면 본문과 같은 Pretendard.
+#   Google Fonts 글꼴은 이름만 적으면 된다.          예) title_font: Outfit
+#   Fontshare 같은 다른 사이트 글꼴은 그 사이트의 CSS 주소도 함께 적는다.
+#     예) title_font: Clash Display
+#         title_font_css: https://api.fontshare.com/v2/css?f[]=clash-display@600&display=swap
+title_font: Clash Display
+title_font_weight: 600   # 그 글꼴에 있는 굵기로 (예: Instrument Serif 는 400 만 있음)
+title_font_css: "https://api.fontshare.com/v2/css?f[]=clash-display@600&display=swap"
 description: 42 과제, 웹, 공부하면서 정리한 것들을 적는 곳
 author: Minkyu
 lang: ko

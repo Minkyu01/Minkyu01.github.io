@@ -15,6 +15,14 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="{{ base }}/assets/style.css?v={{ asset_v }}">
+{% if site.title_font %}
+{#- 제목 글꼴: Google Fonts 면 제목에 쓰인 글자만 받아 온다 (text=) #}
+{%- set tf_weight = site.title_font_weight or 700 %}
+{%- set tf_css = site.title_font_css or ('https://fonts.googleapis.com/css2?family=' ~ (site.title_font | replace(' ', '+')) ~ ':wght@' ~ tf_weight ~ '&text=' ~ (site.title | urlencode) ~ '&display=swap') %}
+{%- if not site.title_font_css %}<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>{% endif %}
+<link rel="stylesheet" href="{{ tf_css }}">
+<style>.logo-title { font-family: "{{ site.title_font }}", var(--font); font-weight: {{ tf_weight }}; }</style>
+{% endif %}
 {% if page.has_math %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css" integrity="sha384-3rdsX6e5mueWyoweR9NIVmtEsUkokpBT/0ALqKKIBMr9j4qhHkaIkAcGgsE6uVlp" crossorigin="anonymous">
 {% endif %}
