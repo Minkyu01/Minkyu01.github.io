@@ -59,7 +59,10 @@ html.dark {
   --purple-600: #c770e4;
   --yellow-100: rgba(255, 195, 66, .28);
   --grey-opacity-100: rgba(217, 217, 255, .08);
+  /* --bg: #101012; --bg-rgb: 23 23 28; */
   --bg: #17171c; --bg-rgb: 23 23 28;
+  /* --bg: #202124; --bg-rgb: 23 23 28; */
+  /* --bg: #313338; --bg-rgb: 23 23 28; */
   --shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 16px 32px -8px rgba(0, 0, 0, .5);
   color-scheme: dark;
 }
