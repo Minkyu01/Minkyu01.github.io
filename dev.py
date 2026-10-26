@@ -351,24 +351,36 @@ def wait_free(port: int, seconds: float = 3) -> bool:
     return True
 
 
+def serve_main(port: int):
+    """배포 미리보기. 다른 서버가 그 포트를 쓰고 있으면 빌 때까지 기다렸다가 이어받는다."""
+    noted = False
+    while True:
+        try:
+            srv = serve(port, MAIN)
+            break
+        except OSError:
+            if not noted:
+                print(f"[dev] {port} 번을 다른 서버가 쓰고 있어, 비면 배포 미리보기를 켭니다", flush=True)
+                noted = True
+            time.sleep(2)
+    threading.Thread(target=main_watcher, daemon=True).start()
+    print(f"[dev] http://127.0.0.1:{port}/  배포 미리보기 (main 에 커밋된 것만, GitHub 에 올라갈 모습)", flush=True)
+    srv.serve_forever()
+
+
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 4900
-    if not wait_free(port):     # 두 번 실행해도 오류 없이 주소만 알려 준다
-        old = "" if already_running(port + 1) else (
-            "\n[dev] 배포 미리보기가 없는 옛 서버입니다. VS Code 메뉴 터미널 › 실행 중인 작업 다시 시작 › 블로그 미리보기")
-        print(f"[dev] 이미 실행 중: http://127.0.0.1:{port}/  (배포 미리보기 http://127.0.0.1:{port + 1}/){old}", flush=True)
-        sys.exit(0)
+    if not wait_free(port):
+        if already_running(port + 1):   # 두 번 실행해도 오류 없이 주소만 알려 준다
+            print(f"[dev] 이미 실행 중: http://127.0.0.1:{port}/  (배포 미리보기 http://127.0.0.1:{port + 1}/)", flush=True)
+            sys.exit(0)
+        # 배포 미리보기가 없는 이전 서버가 작업 미리보기를 쥐고 있다 → 배포 미리보기만 켠다
+        print(f"[dev] {port} 번은 이전 미리보기 서버가 쓰고 있어 배포 미리보기만 켭니다", flush=True)
+        serve_main(port + 1)
     rebuild()
     threading.Thread(target=watcher, daemon=True).start()
     work = serve(port, WORK)
     print(f"[dev] http://127.0.0.1:{port}/  작업 미리보기 (초안·로컬 전용 포함, 저장하면 저절로 새로고침)", flush=True)
     wait_free(port + 1)
-    try:
-        main = serve(port + 1, MAIN)
-    except OSError:
-        print(f"[dev] {port + 1} 번을 다른 프로그램이 쓰고 있어 배포 미리보기는 건너뜀", flush=True)
-    else:
-        threading.Thread(target=main_watcher, daemon=True).start()
-        threading.Thread(target=main.serve_forever, daemon=True).start()
-        print(f"[dev] http://127.0.0.1:{port + 1}/  배포 미리보기 (main 에 커밋된 것만, GitHub 에 올라갈 모습)", flush=True)
+    threading.Thread(target=serve_main, args=(port + 1,), daemon=True).start()
     work.serve_forever()
