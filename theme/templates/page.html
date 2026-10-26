@@ -67,7 +67,7 @@
 <div class="layout">
   <aside class="sidebar" id="sidebar" aria-label="글 목록">
     {%- macro nav_page(p) -%}
-      <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}><span class="nav-text">{{ p.title }}</span>{% if p.draft %}<span class="nav-draft">초안</span>{% endif %}</a>
+      <a class="nav-link{% if p.url == page.url %} active{% endif %}" href="{{ base }}{{ p.url }}"{% if p.url == page.url %} aria-current="page"{% endif %}><span class="nav-text">{{ p.title }}</span>{% if p.local_only %}<span class="nav-draft">로컬</span>{% elif p.draft %}<span class="nav-draft">초안</span>{% endif %}</a>
     {%- endmacro -%}
     {%- macro nav_items(node) -%}
       {%- for item in node.items -%}
@@ -138,7 +138,7 @@
       {% if page.is_post %}
       <p class="page-meta">
         <time datetime="{{ page.date }}">{{ page.date | ko_date }}</time>
-        {% if page.draft %}<span class="tag tag-draft">초안</span>{% endif %}
+        {% if page.local_only %}<span class="tag tag-draft" title="이 컴퓨터에만 있고 GitHub 에는 올라가지 않습니다">로컬 전용</span>{% elif page.draft %}<span class="tag tag-draft" title="미리보기에만 보이고 배포에서는 빠집니다">초안</span>{% endif %}
         {% for t in page.tags %}<a class="tag" href="{{ base }}/tags/#{{ t | slug }}">{{ t }}</a>{% endfor %}
       </p>
       {% elif page.meta_line %}

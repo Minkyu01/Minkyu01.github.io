@@ -1,4 +1,15 @@
+# 빌드 결과·캐시
 _site/
+_site.next/
+_site.old/
+# 기록 다시 쓰기 전 백업 (이 컴퓨터에만)
+.backups/
 .venv/
 __pycache__/
 .DS_Store
+
+# 로컬 전용: 이 컴퓨터에만 두고 GitHub 에는 올리지 않음
+# (미리보기에서는 보이고 "로컬" 표시가 붙음, 배포 사이트에는 없음)
+DESIGN.md
+content/guide/
+.vscode/

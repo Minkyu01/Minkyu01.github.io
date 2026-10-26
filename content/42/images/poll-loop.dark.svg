@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 392" width="720" height="392" role="img" aria-label="poll 이벤트 루프">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" fill="#62626d"/></marker></defs>
+<rect width="720" height="392" rx="16" fill="#202027"/>
+<rect x="28" y="72" width="176" height="228" rx="12" fill="#2c2c35" stroke="#3c3c47"/>
+<text x="48" y="104" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="13" fill="#9e9ea4">감시 목록 fds</text>
+<rect x="44" y="124" width="144" height="40" rx="8" fill="#202027" stroke="#3c3c47"/>
+<text x="60" y="149" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#ffffff">listen</text>
+<text x="172" y="149" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">fd 3</text>
+<rect x="44" y="176" width="144" height="40" rx="8" fill="#202027" stroke="#3c3c47"/>
+<text x="60" y="201" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#ffffff">client</text>
+<text x="172" y="201" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">fd 5</text>
+<rect x="44" y="228" width="144" height="40" rx="8" fill="#202027" stroke="#3c3c47"/>
+<text x="60" y="253" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#ffffff">client</text>
+<text x="172" y="253" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">fd 6</text>
+<path d="M204 186 H244" stroke="#62626d" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<rect x="252" y="150" width="176" height="72" rx="16" fill="#1f2a3d" stroke="#2c5aa0"/>
+<text x="340" y="182" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#64a8ff">poll(fds, n, -1)</text>
+<text x="340" y="204" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="13" fill="#9e9ea4">하나라도 준비될 때까지 잠듦</text>
+<path d="M428 186 C 456 186, 452 70, 478 70" stroke="#62626d" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<rect x="484" y="40" width="208" height="60" rx="12" fill="#2c2c35" stroke="#3c3c47"/>
+<text x="500" y="64" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">listen fd · POLLIN</text>
+<text x="500" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="15" font-weight="700" fill="#ffffff">accept() → fds 에 추가</text>
+<path d="M428 186 C 456 186, 452 146, 478 146" stroke="#62626d" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<rect x="484" y="116" width="208" height="60" rx="12" fill="#2c2c35" stroke="#3c3c47"/>
+<text x="500" y="140" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">client · POLLIN</text>
+<text x="500" y="161" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="15" font-weight="700" fill="#ffffff">recv() → 버퍼에 쌓기</text>
+<path d="M428 186 C 456 186, 452 222, 478 222" stroke="#62626d" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<rect x="484" y="192" width="208" height="60" rx="12" fill="#2c2c35" stroke="#3c3c47"/>
+<text x="500" y="216" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">client · POLLOUT</text>
+<text x="500" y="237" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="15" font-weight="700" fill="#ffffff">send() → 다 보내면 끄기</text>
+<path d="M428 186 C 456 186, 452 298, 478 298" stroke="#62626d" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<rect x="484" y="268" width="208" height="60" rx="12" fill="#2c2c35" stroke="#3c3c47"/>
+<text x="500" y="292" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#9e9ea4">POLLHUP · POLLERR</text>
+<text x="500" y="313" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="15" font-weight="700" fill="#ffffff">close() → fds 에서 빼기</text>
+<path d="M588 328 V356 H116 V308" stroke="#62626d" stroke-width="1.5" fill="none" stroke-dasharray="0" marker-end="url(#arr)"/>
+<rect x="300" y="346" width="120" height="20" fill="#202027"/>
+<text x="360" y="361" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="13" fill="#9e9ea4">처리 후 다시 poll()</text>
+<text x="28" y="44" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="15" font-weight="700" fill="#ffffff">이벤트 루프 한 바퀴</text>
+</svg>

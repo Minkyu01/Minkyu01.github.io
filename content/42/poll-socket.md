@@ -16,7 +16,7 @@ tags: [42, C++, 네트워크]
 
 ## 뼈대
 
-![poll 이벤트 루프 도표](../guide/images/poll-loop.svg "poll 이 깨어나면 준비된 fd 만 골라 처리하고 다시 잠든다")
+![poll 이벤트 루프 도표](./images/poll-loop.svg "poll 이 깨어나면 준비된 fd 만 골라 처리하고 다시 잠든다")
 
 ```cpp title="server.cpp"
 std::vector<pollfd> fds;

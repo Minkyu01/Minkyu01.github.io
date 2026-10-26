@@ -91,6 +91,7 @@ class Page:
     crumbs: list = field(default_factory=list)   # 위쪽 폴더들 [{title, url}]
     place: str = ""             # 가장 가까운 폴더 이름 (목록의 보조 정보)
     meta_line: str = ""         # 폴더·시리즈 페이지 머리의 한 줄 (글 n편 …)
+    local_only: bool = False    # .gitignore 에 걸린 글 = 이 컴퓨터에만 있고 GitHub 에는 안 올라감
 
     is_folder = False
 
@@ -175,6 +176,20 @@ def git_date(path: Path, first: bool) -> dt.date | None:
     if out.returncode != 0 or not lines:
         return None
     return dt.date.fromisoformat(lines[-1] if first else lines[0])
+
+
+def git_ignored(rels: list[str]) -> set[str]:
+    """content/ 기준 경로 중 .gitignore 에 걸린 것. git 이 없거나 저장소가 아니면 빈 집합."""
+    if not rels:
+        return set()
+    try:
+        out = subprocess.run(["git", "check-ignore", "--stdin", "-z"], cwd=ROOT, capture_output=True, text=True, timeout=10,
+                             input="".join(f"content/{r}\0" for r in rels))
+    except Exception:
+        return set()
+    if out.returncode not in (0, 1):      # 1 = 걸린 것 없음, 128 = 저장소 아님
+        return set()
+    return {x[len("content/"):] for x in out.stdout.split("\0") if x.startswith("content/")}
 
 
 def file_date(path: Path) -> dt.date:
@@ -434,43 +449,29 @@ class Builder:
     # 1) 읽기
     def load(self):
         self.folder_meta: dict[str, dict] = {}
+        # .gitignore 에 걸린 파일 = 로컬 전용. 미리보기(--drafts)에서는 "로컬" 표시로 보여 주고,
+        # 배포용 빌드에서는 빼서 GitHub 에서 빌드한 결과와 같게 만든다.
+        self.local_only = git_ignored([f.relative_to(CONTENT).as_posix() for f in CONTENT.rglob("*") if f.is_file()])
         for src in sorted(CONTENT.rglob("*.md")):
             rel = src.relative_to(CONTENT).as_posix()
             parts = Path(rel).parts
+            local = rel in self.local_only
+            if local and not self.drafts:
+                continue
+            try:
+                fm, body = split_front_matter(src.read_text(encoding="utf-8"))
+            except Exception as e:
+                raise BuildError(f"content/{rel}: 머리말(맨 위 --- 사이)을 읽지 못했습니다.\n  {e}") from e
             if any(part.startswith(("_", ".")) for part in parts):
                 if parts[-1] == "_index.md" and not any(x.startswith(("_", ".")) for x in parts[:-1]) and len(parts) > 1:
-                    fm, body = split_front_matter(src.read_text(encoding="utf-8"))   # 폴더 소개·이름·순서
-                    self.folder_meta["/".join(parts[:-1])] = {**fm, "body": body, "src": src}
+                    self.folder_meta["/".join(parts[:-1])] = {**fm, "body": body, "src": src}   # 폴더 소개·이름·순서
                 continue
-            fm, body = split_front_matter(src.read_text(encoding="utf-8"))
-            draft = bool(fm.get("draft"))
-            if draft and not self.drafts:
-                continue
-            group = parts[0] if len(parts) > 1 else None
-            folder = posixpath.dirname(rel)
-            is_home = rel == "index.md"
-            num, stem = None, src.stem
-            m = re.match(r"^(\d+)[-_. ](.+)$", stem)          # "01-소켓.md" → 순서 1, 주소 "소켓"
-            if m:
-                num, stem = int(m.group(1)), m.group(2)
-            slug = str(fm.get("slug") or slugify(stem))
-            url = "/" if is_home else dir_url(folder) + slug + "/"
-            title = fm.get("title") or (self.cfg["title"] if is_home else stem)
-            order = fm.get("order", num)
-            page = Page(
-                src=src, rel=rel, group=group, slug=slug, url=url, title=str(title),
-                description=str(fm.get("description") or ""),
-                date=to_date(fm.get("date")) or git_date(src, first=True) or file_date(src),
-                updated=to_date(fm.get("updated")) or git_date(src, first=False) or file_date(src),
-                tags=[str(t) for t in (fm.get("tags") or [])],
-                order=order, draft=draft, body_md=body, is_home=is_home,
-                folder=folder, kind="home" if is_home else "post",
-                series=str(fm["series"]) if fm.get("series") else None,
-                series_order=fm.get("series_order", order),
-                series_description=str(fm.get("series_description") or ""),
-            )
-            self.pages.append(page)
-            self.pages_by_rel[rel] = page
+            try:
+                self.load_page(src, rel, parts, fm, body, local)
+            except BuildError:
+                raise
+            except Exception as e:
+                raise BuildError(f"content/{rel}: 머리말 값을 쓸 수 없습니다.\n  {type(e).__name__}: {e}") from e
         if "index.md" not in self.pages_by_rel:
             home = Page(src=CONTENT / "index.md", rel="index.md", group=None, slug="", url="/",
                         title=self.cfg["title"], description=self.cfg.get("description", ""),
@@ -478,6 +479,37 @@ class Builder:
                         date=dt.date.today(), updated=dt.date.today())
             self.pages.insert(0, home)
             self.pages_by_rel["index.md"] = home
+
+    def load_page(self, src: Path, rel: str, parts: tuple, fm: dict, body: str, local: bool):
+        """글 파일 하나 → Page."""
+        draft = bool(fm.get("draft"))
+        if draft and not self.drafts:
+            return
+        group = parts[0] if len(parts) > 1 else None
+        folder = posixpath.dirname(rel)
+        is_home = rel == "index.md"
+        num, stem = None, src.stem
+        m = re.match(r"^(\d+)[-_. ](.+)$", stem)          # "01-소켓.md" → 순서 1, 주소 "소켓"
+        if m:
+            num, stem = int(m.group(1)), m.group(2)
+        slug = str(fm.get("slug") or slugify(stem))
+        url = "/" if is_home else dir_url(folder) + slug + "/"
+        title = fm.get("title") or (self.cfg["title"] if is_home else stem)
+        order = fm.get("order", num)
+        page = Page(
+            src=src, rel=rel, group=group, slug=slug, url=url, title=str(title),
+            description=str(fm.get("description") or ""),
+            date=to_date(fm.get("date")) or git_date(src, first=True) or file_date(src),
+            updated=to_date(fm.get("updated")) or git_date(src, first=False) or file_date(src),
+            tags=[str(t) for t in (fm.get("tags") or [])],
+            order=order, draft=draft, body_md=body, is_home=is_home, local_only=local,
+            folder=folder, kind="home" if is_home else "post",
+            series=str(fm["series"]) if fm.get("series") else None,
+            series_order=fm.get("series_order", order),
+            series_description=str(fm.get("series_description") or ""),
+        )
+        self.pages.append(page)
+        self.pages_by_rel[rel] = page
 
     # 2) 폴더 나무 · 순서 · 시리즈
     @staticmethod
@@ -567,7 +599,9 @@ class Builder:
             bits.append(p.place)
         if p.series_info and number is None:
             bits.append(f"{p.series_info['title']} {p.series_info['index']}편")
-        if p.draft:
+        if p.local_only:
+            bits.append("로컬 전용")
+        elif p.draft:
             bits.append("초안")
         meta = " · ".join(b for b in bits if b)
         desc = f'<p class="post-card-desc">{html.escape(p.excerpt)}</p>' if p.excerpt else ""
@@ -701,6 +735,9 @@ class Builder:
         assets = self.out / "assets"
         shutil.copytree(THEME / "static", assets, dirs_exist_ok=True)
         for f in CONTENT.rglob("*"):
+            rel_f = f.relative_to(CONTENT).as_posix()
+            if not self.drafts and rel_f in self.local_only:
+                continue
             if f.is_file() and f.suffix.lower() != ".md" and not any(p.startswith((".", "_")) for p in f.relative_to(CONTENT).parts):
                 dest = self.out / f.relative_to(CONTENT)
                 dest.parent.mkdir(parents=True, exist_ok=True)
