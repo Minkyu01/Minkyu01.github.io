@@ -2,6 +2,7 @@
 _site/
 _site.next/
 _site.old/
+_site.main*/
 # 기록 다시 쓰기 전 백업 (이 컴퓨터에만)
 .backups/
 .venv/
@@ -12,4 +13,6 @@ __pycache__/
 # (미리보기에서는 보이고 "로컬" 표시가 붙음, 배포 사이트에는 없음)
 DESIGN.md
 content/guide/
+content/capstone/
+content/42/test/
 .vscode/
