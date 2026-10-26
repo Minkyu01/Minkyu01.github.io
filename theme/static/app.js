@@ -179,7 +179,7 @@
         deterministicIds: true, deterministicIDSeed: "tech-blog",   // 시계 대신 순번으로 id → 여러 도표가 한 칸에 겹쳐 그려지지 않음
         sequence: { actorFontSize: 15, messageFontSize: 15, noteFontSize: 13, mirrorActors: false },
         // Mermaid 12 기본값(elk 배치, 상자 최소 폭 120px)은 본문 폭에 비해 너무 넓다 → dagre + 촘촘한 간격
-        layout: "dagre", flowchart: { minNodeWidth: 0, padding: 12, nodeSpacing: 30, rankSpacing: 36, curve: "basis" },
+        layout: "dagre", flowchart: { minNodeWidth: 0, wrappingWidth: 200, padding: 12, nodeSpacing: 30, rankSpacing: 36, curve: "basis" },   // 120px 에서 줄바꿈하면 한글 낱말이 갈라짐
       });
       blocks.forEach((el) => { el.removeAttribute("data-processed"); el.textContent = el.dataset.src; });
       try { await mermaid.run({ nodes: blocks }); } catch (e) { console.error("mermaid", e); }
