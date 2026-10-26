@@ -59,8 +59,8 @@ class Preview:
         self.base = ""              # 사이트가 놓이는 하위 경로. 배포 미리보기만 "/tech_blog"
         self.builds = 0
         self.lock = threading.Lock()
-        # 미리보기 창이 0.6초마다 읽어 간다. hint 는 빌드가 멈췄을 때 상자 첫 줄
-        self.state = {"v": f"{START}-0", "error": "", "url": None, "badge": "", "hint": hint}
+        # 미리보기 창이 0.6초마다 읽어 간다. hint 는 빌드가 멈췄을 때 상자 첫 줄, warn 은 멈추지 않는 경고(노란 상자)
+        self.state = {"v": f"{START}-0", "error": "", "warn": "", "url": None, "badge": "", "hint": hint}
 
     def swap(self):
         if self.old.exists():
@@ -70,10 +70,10 @@ class Preview:
         self.next.rename(self.out)
         shutil.rmtree(self.old, ignore_errors=True)
 
-    def done(self, url=None, badge=""):
+    def done(self, url=None, badge="", warn=""):
         self.builds += 1
         with self.lock:
-            self.state.update(v=f"{START}-{self.builds}", error="", url=url, badge=badge)
+            self.state.update(v=f"{START}-{self.builds}", error="", warn=warn, url=url, badge=badge)
 
     def report(self, msg: str):
         with self.lock:
@@ -127,8 +127,9 @@ def rebuild(changed=()):
         n = b.build()
         WORK.swap()
         url = next((u for u in (url_for(b, f) for f in changed) if u), None)
-        WORK.done(url=url)
-        print(f"[dev] {n}쪽 빌드 {time.time() - t0:.1f}초" + (f"  → {url}" if url else ""), flush=True)
+        warn = "\n\n".join(getattr(b, "warnings", []))
+        WORK.done(url=url, warn=warn)
+        print(f"[dev] {n}쪽 빌드 {time.time() - t0:.1f}초" + (f"  → {url}" if url else "") + (f"\n[dev] 경고: {warn}" if warn else ""), flush=True)
     except build.BuildError as e:
         WORK.report(str(e))
     except Exception as e:
@@ -240,7 +241,9 @@ RELOAD_JS = r"""
       }
       version = s.v;
       label(s.badge);
-      if (s.error) show(s.hint + "\n\n" + s.error, "#f04452"); else hide();
+      if (s.error) show(s.hint + "\n\n" + s.error, "#f04452");
+      else if (s.warn) show("빌드는 됐지만 고칠 것이 있습니다. 고치고 저장하면 이 상자는 저절로 사라집니다.\n\n" + s.warn, "#ffb331");
+      else hide();
     } catch (e) {
       if (++fails === 3) show("미리보기 서버가 꺼졌습니다. VS Code 에서 '블로그 미리보기' 작업을 다시 실행하세요.", "#8b95a1");
     }

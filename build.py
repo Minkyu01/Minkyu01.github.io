@@ -28,7 +28,7 @@ import sys
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from xml.sax.saxutils import escape as xml_escape
 
 import yaml
@@ -266,11 +266,18 @@ def make_markdown(ctx: "Builder") -> MarkdownIt:
         if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith(("/", "#")):
             return target
         path, frag = (target.split("#", 1) + [""])[:2]
+        frag = f"#{frag}" if frag else ""
         resolved = posixpath.normpath(posixpath.join(env["src_dir"], path)) if path else env["src_rel"]
         page = ctx.pages_by_rel.get(resolved)
         if page is not None:
-            return ctx.base + page.url + (f"#{frag}" if frag else "")
-        return ctx.base + "/" + resolved.lstrip("./") + (f"#{frag}" if frag else "")
+            ctx.note_link(env, target, page=page)
+            return ctx.base + page.url + frag
+        folder = getattr(ctx, "folders", {}).get(resolved.removesuffix("/_index.md"))
+        if folder is not None:                       # 폴더(나 그 _index.md)를 가리키면 폴더 페이지로
+            ctx.note_link(env, target, folder=folder)
+            return ctx.base + folder.url + frag
+        ctx.note_link(env, target, rel=resolved)
+        return ctx.base + "/" + resolved.lstrip("./") + frag
 
     def render_fence(self, tokens, idx, options, env):
         token = tokens[idx]
@@ -457,6 +464,10 @@ class Builder:
         self.pages: list[Page] = []
         self.pages_by_rel: dict[str, Page] = {}
         self.groups: list[dict] = []
+        self.skipped: dict[str, str] = {}            # 배포용 빌드에서 뺀 글 → "초안" / "로컬 전용"
+        self.link_problems: list[tuple[str, str, str]] = []   # (글, 적은 링크, 이유)
+        self.reported_urls: set[str] = set()
+        self.warnings: list[str] = []                # 미리보기에서는 멈추지 않고 알리기만
         self.md = make_markdown(self)
         self.env = Environment(loader=FileSystemLoader(THEME / "templates"), autoescape=select_autoescape(["html"]))
         self.env.filters["ko_date"] = ko_date
@@ -474,6 +485,7 @@ class Builder:
             parts = Path(rel).parts
             local = rel in self.local_only
             if local and not self.drafts:
+                self.skipped[rel] = "로컬 전용"
                 continue
             try:
                 fm, body = split_front_matter(src.read_text(encoding="utf-8"))
@@ -501,6 +513,7 @@ class Builder:
         """글 파일 하나 → Page."""
         draft = bool(fm.get("draft"))
         if draft and not self.drafts:
+            self.skipped[rel] = "초안"
             return
         group = parts[0] if len(parts) > 1 else None
         folder = posixpath.dirname(rel)
@@ -738,6 +751,68 @@ class Builder:
             edit_url=edit_url, asset_v=self.asset_v, has_series=bool(self.series), **extra,
         )
 
+    def note_link(self, env: dict, target: str, page: Page | None = None, folder: Folder | None = None,
+                  rel: str | None = None) -> None:
+        """글 속 상대 링크·그림 하나를 확인해서, 배포하면 깨질 것을 모아 둔다 (build() 끝에서 알림)."""
+        src = env["src_rel"]
+        if page is not None or folder is not None:   # 미리보기에는 초안도 있으니, 공개 글 → 초안 링크만 따로 알린다
+            here = self.pages_by_rel.get(src)
+            if here is None or here.draft or here.local_only:
+                return
+            if page is not None and (page.draft or page.local_only):
+                self.link_problems.append((src, target, f"{'로컬 전용' if page.local_only else '초안'} 글이라 배포하면 깨짐"))
+            elif folder is not None and all(p.draft or p.local_only for p in folder.all_pages()):
+                self.link_problems.append((src, target, "초안·로컬 글만 있는 폴더라 배포하면 깨짐"))
+            return
+        if rel in self.skipped:
+            why = f"{self.skipped[rel]}이라 배포에서 빠지는 글"
+        elif not (CONTENT / rel).exists():
+            why = "없는 파일"
+        elif (CONTENT / rel).is_dir():
+            why = "공개 글이 없는 폴더" if not self.drafts else "글이 없는 폴더"
+        elif rel in self.local_only and not self.drafts:
+            why = "로컬 전용 파일이라 배포에서 빠짐"
+        else:
+            return
+        self.link_problems.append((src, target, why))
+        self.reported_urls.add(self.base + "/" + rel.lstrip("./"))
+
+    def check_built_links(self) -> list[tuple[str, str, str]]:
+        """만들어진 HTML 에서 사이트 안을 가리키는 href·src 가 실제로 있는지 본다 (템플릿·HTML 로 적은 링크 포함)."""
+        seen: dict[tuple[str, str], str] = {}
+        for f in sorted(self.out.rglob("*.html")):
+            d = f.parent.relative_to(self.out).as_posix()
+            here = "/" if d == "." else f"/{d}/"
+            for m in re.finditer(r'\s(?:href|src)="([^"]*)"', f.read_text(encoding="utf-8")):
+                url = html.unescape(m.group(1)).split("#", 1)[0].split("?", 1)[0]
+                if not url or url.startswith("//") or re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", url):
+                    continue
+                if not url.startswith("/"):
+                    url = posixpath.normpath(posixpath.join(self.base + here, url)) + ("/" if url.endswith("/") else "")
+                if url in self.reported_urls:
+                    continue
+                if self.base and url != self.base and not url.startswith(self.base + "/"):
+                    seen.setdefault((url, f"{self.base}/ 밖의 주소"), here)
+                    continue
+                target = self.out / unquote(url[len(self.base):]).lstrip("/")
+                if url.endswith("/") or target.is_dir():
+                    target = target / "index.html"
+                if not target.exists():
+                    seen.setdefault((url, "사이트에 없는 주소"), here)
+        return [(where, url, why) for (url, why), where in seen.items()]
+
+    def report_links(self) -> None:
+        """깨진 링크: 배포용 빌드면 멈추고 (GitHub 에서도 배포 안 함), 미리보기면 경고만 남긴다."""
+        lines = [f"  - content/{src}: {target} → {why}" for src, target, why in self.link_problems]
+        lines += [f"  - {self.base}{where} 쪽: {url} → {why}" for where, url, why in self.check_built_links()]
+        if not lines:
+            return
+        msg = (f"깨진 링크 {len(lines)}개:\n" + "\n".join(lines[:20]) + ("\n  …" if len(lines) > 20 else "")
+               + "\n  링크 주소를 고치거나, 초안을 가리키는 링크면 그 글을 먼저 공개(draft: true 지우기)하세요.")
+        if not self.drafts:
+            raise BuildError(msg)
+        self.warnings.append(msg)
+
     def check_urls(self, pages: list[Page]) -> None:
         """같은 주소에 두 페이지가 나오면 하나가 조용히 사라지므로 빌드를 멈춘다."""
         seen: dict[str, Page] = {}
@@ -841,6 +916,7 @@ class Builder:
         (self.out / "404.html").write_text(self.render_tpl(nf), encoding="utf-8")
         self.copy_static()
         self.write_extras()
+        self.report_links()
         return len(self.pages)
 
 
@@ -857,6 +933,8 @@ def main(argv=None):
     except BuildError as e:
         print(f"빌드 멈춤: {e}", file=sys.stderr)
         sys.exit(1)
+    for w in b.warnings:
+        print(f"경고: {w}", file=sys.stderr)
     print(f"built {n} pages → {b.out}  (base='{b.base}')")
 
 
