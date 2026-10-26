@@ -121,13 +121,6 @@
     const text = [...pre.querySelectorAll(".line")].map((l) => l.textContent).join("\n");
     try { await navigator.clipboard.writeText(text); flash(btn, "복사됨"); } catch (e) {}
   }));
-  const copyMd = $("#copy-md");
-  if (copyMd) copyMd.addEventListener("click", async () => {
-    try {
-      const text = await (await fetch(copyMd.dataset.src)).text();
-      await navigator.clipboard.writeText(text); flash(copyMd, "복사됨");
-    } catch (e) {}
-  });
 
   // ---- 수식 (KaTeX) ----
   if (window.katex) {

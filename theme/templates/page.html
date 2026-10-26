@@ -172,12 +172,6 @@
             <span>목차</span>
           </button>
           {% endif %}
-          {% if page.kind == 'post' and edit_url %}
-          <button type="button" class="btn copy-md-btn" id="copy-md" data-src="{{ base }}{{ page.url }}index.md">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span>Markdown 복사</span>
-          </button>
-          {% endif %}
         </div>
       </div>
       {% if page.description %}<p class="page-desc">{{ page.description }}</p>{% endif %}
