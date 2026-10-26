@@ -1,0 +1,43 @@
+# main 브랜치에 푸시하면 블로그를 빌드해서 GitHub Pages 에 올린다.
+# 저장소 Settings › Pages › Source 를 "GitHub Actions" 로 한 번만 바꿔 두면 된다.
+name: Deploy blog
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # git 날짜(작성·수정일)를 쓰기 위해 전체 이력
+      - uses: astral-sh/setup-uv@v6
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build
+        run: uv run --no-project build.py --base "${{ steps.pages.outputs.base_path }}" --url "${{ steps.pages.outputs.base_url }}"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

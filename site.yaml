@@ -1,0 +1,26 @@
+# 블로그 설정 — 값을 바꾸고 다시 빌드하면 반영된다.
+title: 민규의 기술 블로그
+emoji: 🧭
+description: 42 과제, 웹, 공부하면서 정리한 것들을 적는 곳
+author: Minkyu
+lang: ko
+
+# 배포 주소. GitHub Pages 저장소 이름이 <아이디>.github.io 가 아니면 뒤에 /저장소이름 이 붙는다.
+# (Actions 워크플로가 base_path 는 자동으로 맞춰 준다. RSS·sitemap 에는 이 값이 그대로 쓰인다.)
+url: https://minkyu01.github.io/tech_blog
+repo: https://github.com/Minkyu01/tech_blog
+edit_branch: main
+
+# 사이드바 그룹 순서와 이름. content/ 아래 폴더 이름이 dir 이다. 여기 없는 폴더는 뒤에 폴더 이름 그대로 붙는다.
+groups:
+  - dir: guide
+    title: 안내
+  - dir: 42
+    title: 42 과제
+  - dir: web
+    title: 웹
+
+home_recent: 8          # 홈의 "최근 글" 개수
+footer_card:            # 사이드바 바닥 카드 (GitBook 의 "Powered by" 자리)
+  text: GitHub 에서 소스 보기
+  href: https://github.com/Minkyu01/tech_blog
